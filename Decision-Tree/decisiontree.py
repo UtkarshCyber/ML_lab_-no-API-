@@ -1,146 +1,96 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import math
-import copy
+import numpy as np
 
-dataset = pd.read_csv('tennis.csv')
-X = dataset.iloc[:, 1:].values
-# print(X)
-attribute = ['outlook', 'temp', 'humidity', 'wind']
+data = pd.read_csv('/content/drive/MyDrive/ML data/ID3.csv')
+features = [feat for feat in data]
+features.remove("Answer")
 
 
-class Node(object):
+class Node:
     def __init__(self):
-        self.value = None
-        self.decision = None
-        self.childs = None
+        self.children = []
+        self.value = ""
+        self.isLeaf = False
+        self.pred = ""
 
 
-def findEntropy(data, rows):
-    yes = 0
-    no = 0
-    ans = -1
-    idx = len(data[0]) - 1
-    entropy = 0
-    for i in rows:
-        if data[i][idx] == 'Yes':
-            yes = yes + 1
+def entropy(examples):
+    pos = 0.0
+    neg = 0.0
+    for _, row in examples.iterrows():
+        if row["Answer"] == "yes":
+            pos += 1
         else:
-            no = no + 1
-
-    x = yes/(yes+no)
-    y = no/(yes+no)
-    if x != 0 and y != 0:
-        entropy = -1 * (x*math.log2(x) + y*math.log2(y))
-    if x == 1:
-        ans = 1
-    if y == 1:
-        ans = 0
-    return entropy, ans
+            neg += 1
+    if pos == 0.0 or neg == 0.0:
+        return 0.0
+    else:
+        p = pos / (pos + neg)
+        n = neg / (pos + neg)
+        return -(p * math.log(p, 2) + n * math.log(n, 2))
 
 
-def findMaxGain(data, rows, columns):
-    maxGain = 0
-    retidx = -1
-    entropy, ans = findEntropy(data, rows)
-    if entropy == 0:
-        """if ans == 1:
-            print("Yes")
-        else:
-            print("No")"""
-        return maxGain, retidx, ans
-
-    for j in columns:
-        mydict = {}
-        idx = j
-        for i in rows:
-            key = data[i][idx]
-            if key not in mydict:
-                mydict[key] = 1
-            else:
-                mydict[key] = mydict[key] + 1
-        gain = entropy
-
-        # print(mydict)
-        for key in mydict:
-            yes = 0
-            no = 0
-            for k in rows:
-                if data[k][j] == key:
-                    if data[k][-1] == 'Yes':
-                        yes = yes + 1
-                    else:
-                        no = no + 1
-            # print(yes, no)
-            x = yes/(yes+no)
-            y = no/(yes+no)
-            # print(x, y)
-            if x != 0 and y != 0:
-                gain += (mydict[key] * (x*math.log2(x) + y*math.log2(y)))/14
-        # print(gain)
-        if gain > maxGain:
-            # print("hello")
-            maxGain = gain
-            retidx = j
-
-    return maxGain, retidx, ans
+def info_gain(examples, attr):
+    uniq = np.unique(examples[attr])
+     
+    gain = entropy(examples)
+     
+    for u in uniq:
+        subdata = examples[examples[attr] == u]
+         
+        sub_e = entropy(subdata)
+        gain -= (float(len(subdata)) / float(len(examples))) * sub_e
+         
+    return gain
 
 
-def buildTree(data, rows, columns):
-
-    maxGain, idx, ans = findMaxGain(X, rows, columns)
+def ID3(examples, attrs):
     root = Node()
-    root.childs = []
-    # print(maxGain
-    #
-    # )
-    if maxGain == 0:
-        if ans == 1:
-            root.value = 'Yes'
-        else:
-            root.value = 'No'
-        return root
 
-    root.value = attribute[idx]
-    mydict = {}
-    for i in rows:
-        key = data[i][idx]
-        if key not in mydict:
-            mydict[key] = 1
+    max_gain = 0
+    max_feat = ""
+    for feature in attrs:
+         
+        gain = info_gain(examples, feature)
+        if gain > max_gain:
+            max_gain = gain
+            max_feat = feature
+    root.value = max_feat
+     
+    uniq = np.unique(examples[max_feat])
+     
+    for u in uniq:
+         
+        subdata = examples[examples[max_feat] == u]
+         
+        if entropy(subdata) == 0.0:
+            newNode = Node()
+            newNode.isLeaf = True
+            newNode.value = u
+            newNode.pred = np.unique(subdata["Answer"])
+            root.children.append(newNode)
         else:
-            mydict[key] += 1
-
-    newcolumns = copy.deepcopy(columns)
-    newcolumns.remove(idx)
-    for key in mydict:
-        newrows = []
-        for i in rows:
-            if data[i][idx] == key:
-                newrows.append(i)
-        # print(newrows)
-        temp = buildTree(data, newrows, newcolumns)
-        temp.decision = key
-        root.childs.append(temp)
+            dummyNode = Node()
+            dummyNode.value = u
+            new_attrs = attrs.copy()
+            new_attrs.remove(max_feat)
+            child = ID3(subdata, new_attrs)
+            dummyNode.children.append(child)
+            root.children.append(dummyNode)
     return root
 
 
-def traverse(root):
-    print(root.decision)
-    print(root.value)
-
-    n = len(root.childs)
-    if n > 0:
-        for i in range(0, n):
-            traverse(root.childs[i])
-
-
-def calculate():
-    rows = [i for i in range(0, 14)]
-    columns = [i for i in range(0, 4)]
-    root = buildTree(X, rows, columns)
-    root.decision = 'Start'
-    traverse(root)
+def printTree(root: Node, depth=0):
+    for i in range(depth):
+        print("\t", end="")
+    print(root.value, end="")
+    if root.isLeaf:
+        print(" -> ", root.pred)
+    print()
+    for child in root.children:
+        printTree(child, depth + 1)
 
 
-calculate()
+root = ID3(data, features)
+printTree(root)
